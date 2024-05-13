@@ -4,9 +4,9 @@ use std::mem::size_of;
 use std::os::raw::c_int;
 use std::{env, ptr};
 use mpi::collective::SystemOperation;
+use mpi::ffi::*;
 use mpi::Rank;
 use mpi::traits::*;
-use mpi_sys::*;
 
 fn even_1_odd_0(num: usize) -> usize {
     match num % 2 {

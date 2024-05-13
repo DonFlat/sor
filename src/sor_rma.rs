@@ -4,9 +4,9 @@ use std::mem::size_of;
 use std::os::raw::c_int;
 use std::{env, ptr};
 use mpi::collective::SystemOperation;
-use mpi::ffi::*;
 use mpi::Rank;
 use mpi::traits::*;
+use mpi::ffi::*;
 
 fn even_1_odd_0(num: usize) -> usize {
     match num % 2 {
@@ -15,6 +15,7 @@ fn even_1_odd_0(num: usize) -> usize {
     }
 }
 
+// TODO: how would you tell it is a contiguous memory block, or array of pointers?
 fn get_bounds(n: usize, size: usize, rank: usize) -> (usize, usize) {
     let mut nlarge = n % size; // 1000 % 4 = 0
     let mut nsmall = size - nlarge; // 4 - 0 = 4
@@ -37,7 +38,7 @@ fn get_bounds(n: usize, size: usize, rank: usize) -> (usize, usize) {
     (lower_bound, upper_bound)
 }
 
-pub fn sor(problem_size: usize, iteration_limit: usize) {
+pub fn sor(problem_size: usize) {
     let universe = mpi::initialize().unwrap();
     let world = universe.world();
     let size = world.size();
@@ -194,11 +195,10 @@ pub fn sor(problem_size: usize, iteration_limit: usize) {
         }
 
         diff = max_diff;
-        // TODO: can remove it to check pure rma, fixed iterations
         world.all_reduce_into(&diff, &mut max_diff, SystemOperation::max());
         iteration += 1;
 
-        if iteration == iteration_limit {
+        if max_diff <= stop_diff {
             break;
         }
 
@@ -221,17 +221,3 @@ fn print_matrix(matrix: &Vec<Vec<f64>>, n_row: usize, n_col: usize, rank: Rank) 
         println!();
     }
 }
-
-// TODO: revisit RMA paper, why small message is quicker?
-// TODO: try ping-pong test
-// TODO: SOR with different numbers of iterations, problem size. don't need to get correct result
-// Some found for experiment with: 8 nodes, 10 iters,
-// matrix size: 50.000, RMA: 8460.146122999999 ms, sendrev too long to get result
-// Even C sor -O3 on 50K took too long to get result, but 30k took 3.166942 s, RMA is 3562.165272 ms
-// matrix size: 40.000, RMA: 5720.041005 ms, sendrev also too long to get result, C sor is same
-//
-// TODO: seq C vs seq Rust
-
-// TODO: library, refactor test, revisit RMA paper, know synchronization
-// TODO: see CPU cycle
-// start from simple case regardless of displacement unit or so.

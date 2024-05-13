@@ -11,6 +11,7 @@ fn even_1_odd_0(num: usize) -> usize {
     }
 }
 
+// Suppose n = 1000, size = 4, rank = 2
 fn get_bounds(n: usize, size: usize, rank: usize) -> (usize, usize) {
     let mut nlarge = n % size; // 1000 % 4 = 0
     let mut nsmall = size - nlarge; // 4 - 0 = 4
@@ -33,7 +34,7 @@ fn get_bounds(n: usize, size: usize, rank: usize) -> (usize, usize) {
     (lower_bound, upper_bound)
 }
 
-pub fn sor(problem_size: usize, iteration_limit: usize) {
+pub fn sor(problem_size: usize) {
     let universe = mpi::initialize().unwrap();
     let world = universe.world();
     let size = world.size();
@@ -135,7 +136,7 @@ pub fn sor(problem_size: usize, iteration_limit: usize) {
         world.all_reduce_into(&diff, &mut max_diff, SystemOperation::max());
         iteration += 1;
 
-        if iteration == iteration_limit {
+        if max_diff <= stop_diff {
             break;
         }
     }
@@ -161,5 +162,3 @@ fn print_matrix(matrix: &Vec<Vec<f64>>, n_row: usize, n_col: usize, rank: Rank) 
 // iterations should be same
 // only use boundary rows
 // check out if optimization options
-
-// try ping-pong test send/recv vs Get/put

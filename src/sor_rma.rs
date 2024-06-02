@@ -1,9 +1,7 @@
 use std::f64::consts::PI;
-use std::ffi::{c_void};
-use std::os::raw::c_int;
 use mpi::collective::SystemOperation;
 use mpi::traits::*;
-use mpi::ffi::*;
+use mpi::Rank;
 use mpi::window::{AllocatedWindow, WindowOperations};
 
 fn even_1_odd_0(num: usize) -> usize {
@@ -37,6 +35,9 @@ fn get_bounds(n: usize, size: usize, rank: usize) -> (usize, usize) {
 }
 
 pub fn sor(problem_size: usize) {
+    // ************************
+    // **** Setting Up MPI ****
+    // ************************
     let universe = mpi::initialize().unwrap();
     let world = universe.world();
     let size = world.size();
@@ -59,6 +60,9 @@ pub fn sor(problem_size: usize) {
     }
     N += 2;
 
+    // ************************************
+    // **** Setting Up Algo parameters ****
+    // ************************************
     let n_col = N;
     let n_row = N;
     let r = 0.5 * ((PI / n_col as f64).cos() + (PI / n_row as f64).cos());
@@ -74,10 +78,15 @@ pub fn sor(problem_size: usize) {
     if global_lb == 0 {
         global_lb = 1;
     }
-
     let local_ub = global_ub - (global_lb - 1);
-    let mut huge_window:AllocatedWindow<f64> = world.allocate_window(n_col * (local_ub + 1));
-    println!("Rank {} has {} rows", rank, local_ub+1);
+
+    // ***************************
+    // **** Set up the window ****
+    // ***************************
+    let mut huge_window: AllocatedWindow<f64> = world.allocate_window((local_ub + 1) * n_col);
+    // println!("Rank {} has {} rows", rank, local_ub+1);
+
+    let local_ub_pred_rank = calc_pred_rank_local_ub(size, pred_rank, N);
 
     // Initialize the boundary value
     for i in 0..=local_ub {
@@ -106,38 +115,18 @@ pub fn sor(problem_size: usize) {
     // let cur put matrix[1] to pred's local ub window
     // let cur put matrix[local_ub-1] to succ's matrix[0]
 
+    // ********************************
+    // **** Start real computation ****
+    // ********************************
     let t_start = mpi::time();
-    // Now do the real computation
     let mut iteration = 0;
     loop {
         huge_window.fence();
         if pred_rank != rank {
-            unsafe {
-                MPI_Put(
-                    huge_window.window_vector.as_ptr().add(n_col) as *mut c_void,
-                    n_col as c_int,
-                    RSMPI_DOUBLE,
-                    pred_rank,
-                    (local_ub * n_col) as MPI_Aint,
-                    n_col as c_int,
-                    RSMPI_DOUBLE,
-                    huge_window.window_ptr
-                );
-            }
+            huge_window.put(n_col, n_col, pred_rank as usize, (local_ub_pred_rank * n_col), n_col);
         }
         if succ_rank != rank {
-            unsafe {
-                MPI_Put(
-                    huge_window.window_vector.as_ptr().add((local_ub - 1) * n_col) as *mut c_void,
-                    n_col as c_int,
-                    RSMPI_DOUBLE,
-                    succ_rank,
-                    0,
-                    n_col as c_int,
-                    RSMPI_DOUBLE,
-                    huge_window.window_ptr
-                );
-            }
+            huge_window.put((local_ub - 1) * n_col, n_col, succ_rank as usize, 0, n_col);
         }
         huge_window.fence();
         max_diff = 0.0;
@@ -180,6 +169,15 @@ pub fn sor(problem_size: usize) {
         println!("SOR size: {} x {}, time: {} ms", n_row-2, n_col-2, (t_end-t_start) * 1000.0);
         println!("using {} iterations, diff is {} (allowed diff {})", iteration,max_diff,stop_diff)
     }
+}
+
+fn calc_pred_rank_local_ub(size: Rank, pred_rank: i32, mut N: usize) -> usize {
+    let (mut global_lb_pred_rank, global_ub_pred_rank) = get_bounds(N - 1, size as usize, pred_rank as usize);
+    if global_lb_pred_rank == 0 {
+        global_lb_pred_rank = 1;
+    }
+    let local_ub_pred_rank = global_ub_pred_rank - (global_lb_pred_rank - 1);
+    local_ub_pred_rank
 }
 
 // let mut matrix = vec![vec![0.0; n_col]; local_ub+1];

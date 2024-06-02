@@ -36,24 +36,22 @@ fn get_bounds(n: usize, size: usize, rank: usize) -> (usize, usize) {
     (lower_bound, upper_bound)
 }
 
-pub fn runner(max_size: usize) {
+pub fn runner(problem_size: usize) {
     // ************************
     // **** Setting Up MPI ****
     // ************************
     let universe = mpi::initialize().unwrap();
     let world = universe.world();
-    let size = world.size();
+    let world_size = world.size();
     let rank = world.rank();
 
-    for n in powers_of_two(max_size as u32) {
-        let mut time_records: Vec<f64> = Vec::new();
-        for _ in 0..12 {
-            let time = sor(n as usize, rank, size, &world);
-            time_records.push(time);
-        }
-        if rank == 0 {
-            append_to_csv("rma_data.csv", n as usize, &time_records).expect("Error happened writing csv");
-        }
+    let mut time_records: Vec<f64> = Vec::new();
+    for _ in 0..12 {
+        let time = sor(problem_size, rank, world_size, &world);
+        time_records.push(time);
+    }
+    if rank == 0 {
+        append_to_csv("rma_data.csv", problem_size, &time_records).expect("Error happened writing csv");
     }
 }
 

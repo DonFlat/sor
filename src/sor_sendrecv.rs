@@ -2,7 +2,9 @@ use std::env;
 use std::f64::consts::PI;
 use mpi::collective::SystemOperation;
 use mpi::Rank;
+use mpi::topology::SimpleCommunicator;
 use mpi::traits::*;
+use crate::test_utils::powers_of_two;
 
 fn even_1_odd_0(num: usize) -> usize {
     match num % 2 {
@@ -34,11 +36,18 @@ fn get_bounds(n: usize, size: usize, rank: usize) -> (usize, usize) {
     (lower_bound, upper_bound)
 }
 
-pub fn sor(problem_size: usize) {
+pub fn runner(problem_size: usize) {
     let universe = mpi::initialize().unwrap();
     let world = universe.world();
-    let size = world.size();
     let rank = world.rank();
+
+    for n in powers_of_two(problem_size as u32) {
+        sor(n as usize, rank, &world);
+    }
+}
+
+pub fn sor(problem_size: usize, rank: Rank, world: &SimpleCommunicator) {
+    let size = world.size();
 
     let pred_rank = if rank == 0 { rank } else { rank - 1 };
     let succ_rank = if rank == size - 1 { rank } else { rank + 1 };

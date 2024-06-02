@@ -1,10 +1,14 @@
 use std::f64::consts::PI;
-use std::ffi::{c_void};
+use std::ffi::{c_double, c_void};
+use std::mem::size_of;
 use std::os::raw::c_int;
+use std::{env, ptr};
 use mpi::collective::SystemOperation;
+use mpi::Rank;
 use mpi::traits::*;
 use mpi::ffi::*;
-use mpi::window::{AllocatedWindow, WindowOperations};
+use mpi::topology::SimpleCommunicator;
+use crate::test_utils::powers_of_two;
 
 fn even_1_odd_0(num: usize) -> usize {
     match num % 2 {
@@ -36,11 +40,17 @@ fn get_bounds(n: usize, size: usize, rank: usize) -> (usize, usize) {
     (lower_bound, upper_bound)
 }
 
-pub fn sor(problem_size: usize) {
+pub fn runner(problem_size: usize) {
     let universe = mpi::initialize().unwrap();
     let world = universe.world();
-    let size = world.size();
     let rank = world.rank();
+
+    for n in powers_of_two(problem_size as u32) {
+        sor(n as usize, rank, &world);
+    }
+}
+pub fn sor(problem_size: usize, rank: Rank, world: &SimpleCommunicator) {
+    let size = world.size();
 
     let pred_rank = if rank == 0 { 0 } else { rank - 1 };
     let succ_rank = if rank == size - 1 { rank } else { rank + 1 };
@@ -76,22 +86,21 @@ pub fn sor(problem_size: usize) {
     }
 
     let local_ub = global_ub - (global_lb - 1);
-    let mut huge_window:AllocatedWindow<f64> = world.allocate_window(n_col * (local_ub + 1));
-    println!("Rank {} has {} rows", rank, local_ub+1);
+    let mut matrix = vec![vec![0.0; n_col]; local_ub+1];
 
     // Initialize the boundary value
     for i in 0..=local_ub {
         for j in 0..n_col {
             if i == 0 && global_lb - 1 == 0 {
-                set_matrix(i, j, 4.56, &mut huge_window.window_vector, n_col);
+                matrix[i][j] = 4.56;
             } else if i == local_ub && global_ub == n_row - 1 {
-                set_matrix(i, j, 9.85, &mut huge_window.window_vector, n_col);
+                matrix[i][j] = 9.85;
             } else if j == 0 {
-                set_matrix(i, j, 7.32, &mut huge_window.window_vector, n_col);
+                matrix[i][j] = 7.32;
             } else if j == n_col - 1 {
-                set_matrix(i, j, 6.88, &mut huge_window.window_vector, n_col);
+                matrix[i][j] = 6.88;
             } else {
-                set_matrix(i, j, 0.00, &mut huge_window.window_vector, n_col);
+                matrix[i][j] = 0.0;
             }
         }
     }
@@ -105,41 +114,70 @@ pub fn sor(problem_size: usize) {
     // open up local_ub and 0 as windows,
     // let cur put matrix[1] to pred's local ub window
     // let cur put matrix[local_ub-1] to succ's matrix[0]
+    let mut window_local_ub = ptr::null_mut();
+    unsafe {
+        MPI_Win_create(
+            matrix[local_ub].as_mut_ptr() as *mut c_void,
+            (n_col * size_of::<c_double>()) as MPI_Aint,
+            size_of::<c_double>() as c_int,
+            RSMPI_INFO_NULL,
+            RSMPI_COMM_WORLD,
+            &mut window_local_ub
+        );
+    }
+
+    let mut window_row_0 = ptr::null_mut();
+    unsafe {
+        MPI_Win_create(
+            matrix[0].as_mut_ptr() as *mut c_void,
+            (n_col * size_of::<c_double>()) as MPI_Aint,
+            size_of::<c_double>() as c_int,
+            RSMPI_INFO_NULL,
+            RSMPI_COMM_WORLD,
+            &mut window_row_0
+        );
+    }
 
     let t_start = mpi::time();
     // Now do the real computation
     let mut iteration = 0;
     loop {
-        huge_window.fence();
+        unsafe {
+            MPI_Win_fence(0, window_local_ub);
+            MPI_Win_fence(0, window_row_0);
+        }
         if pred_rank != rank {
             unsafe {
                 MPI_Put(
-                    huge_window.window_vector.as_ptr().add(n_col) as *mut c_void,
+                    matrix[1].as_mut_ptr() as *mut c_void,
                     n_col as c_int,
                     RSMPI_DOUBLE,
                     pred_rank,
-                    (local_ub * n_col) as MPI_Aint,
+                    0,
                     n_col as c_int,
                     RSMPI_DOUBLE,
-                    huge_window.window_ptr
+                    window_local_ub
                 );
             }
         }
         if succ_rank != rank {
             unsafe {
                 MPI_Put(
-                    huge_window.window_vector.as_ptr().add((local_ub - 1) * n_col) as *mut c_void,
+                    matrix[local_ub-1].as_mut_ptr() as *mut c_void,
                     n_col as c_int,
                     RSMPI_DOUBLE,
                     succ_rank,
                     0,
                     n_col as c_int,
                     RSMPI_DOUBLE,
-                    huge_window.window_ptr
+                    window_row_0
                 );
             }
         }
-        huge_window.fence();
+        unsafe {
+            MPI_Win_fence(0, window_local_ub);
+            MPI_Win_fence(0, window_row_0);
+        }
         max_diff = 0.0;
         for phase in 0..2 {
             let mut global_row_num = global_lb;
@@ -147,19 +185,18 @@ pub fn sor(problem_size: usize) {
                 let start_col = 1 + (even_1_odd_0(global_row_num) ^ phase);
                 for j in (start_col..n_col-1).step_by(2) {
                     // The stencil operation
-                    let up = get_matrix(i - 1, j, &huge_window.window_vector, n_col);
-                    let down = get_matrix(i + 1, j, &huge_window.window_vector, n_col);
-                    let left = get_matrix(i, j - 1, &huge_window.window_vector, n_col);
-                    let right = get_matrix(i, j + 1, &huge_window.window_vector, n_col);
+                    let up = &matrix[i - 1][j];
+                    let down = &matrix[i + 1][j];
+                    let left = &matrix[i][j - 1];
+                    let right = &matrix[i][j + 1];
 
                     let stencil_val = (up + down + left + right) / 4.0;
-                    let mat_i_j = get_matrix(i, j, &huge_window.window_vector, n_col);
-                    diff = (stencil_val as f64 - mat_i_j as f64).abs();
+                    diff = (stencil_val as f64 - matrix[i][j] as f64).abs();
 
                     if diff > max_diff {
                         max_diff = diff;
                     }
-                    set_matrix(i, j, mat_i_j + omega * (stencil_val - mat_i_j), &mut huge_window.window_vector, n_col);
+                    matrix[i][j] = matrix[i][j] + omega * (stencil_val - matrix[i][j]);
                 }
                 global_row_num += 1;
             }
@@ -182,12 +219,13 @@ pub fn sor(problem_size: usize) {
     }
 }
 
-// let mut matrix = vec![vec![0.0; n_col]; local_ub+1];
-fn set_matrix(i: usize, j: usize, val: f64, matrix: &mut Vec<f64>, ncol: usize) {
-    let ind = i * ncol + j;
-    matrix[ind] = val;
-}
-
-fn get_matrix(i: usize, j: usize, matrix: &Vec<f64>, ncol: usize) -> f64 {
-    return matrix[i * ncol + j];
+fn print_matrix(matrix: &Vec<Vec<f64>>, n_row: usize, n_col: usize, rank: Rank) {
+    println!("Rank {}'s matrix -----------", rank);
+    for i in 0..n_row {
+        print!("r[{}]: ", i);
+        for j in 0..n_col {
+            print!(" {} ", matrix[i][j]);
+        }
+        println!();
+    }
 }

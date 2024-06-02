@@ -33,7 +33,7 @@ def main():
     elif env == 'das':
         for node in node_num:
             das_cmd = f"prun -np {node} -1 -script $PRUN_ETC/prun-openmpi `pwd`/./target/release/sor {app} {size} {node}"
-            print(f'Running: {local_cmd}')
+            print(f'Running: {das_cmd}')
             run_command(das_cmd)
     else:
         print("Neither local | das")

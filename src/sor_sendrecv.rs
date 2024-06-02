@@ -36,7 +36,7 @@ fn get_bounds(n: usize, size: usize, rank: usize) -> (usize, usize) {
     (lower_bound, upper_bound)
 }
 
-pub fn runner(problem_size: usize) {
+pub fn runner(problem_size: usize, node_num: usize) {
     let universe = mpi::initialize().unwrap();
     let world = universe.world();
     let rank = world.rank();
@@ -48,7 +48,7 @@ pub fn runner(problem_size: usize) {
         time_records.push(time);
     }
     if rank == 0 {
-        append_to_csv("sendrecv_data.csv", problem_size, &time_records).expect("Error happened writing csv");
+        append_to_csv("sendrecv_data.csv", problem_size, node_num, &time_records).expect("Error happened writing csv");
     }
 }
 

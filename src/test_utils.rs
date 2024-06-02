@@ -7,7 +7,7 @@ pub fn powers_of_two(n: u32) -> Vec<u32> {
     (5..n).map(|i| 2_u32.pow(i)).collect()
 }
 
-pub fn append_to_csv(file_path: &str, vector_size: usize, repetitions: &Vec<f64>) -> Result<(), Box<dyn Error>> {
+pub fn append_to_csv(file_path: &str, vector_size: usize, node_num: usize, repetitions: &Vec<f64>) -> Result<(), Box<dyn Error>> {
     let file = OpenOptions::new()
         .write(true)
         .append(true)
@@ -18,7 +18,7 @@ pub fn append_to_csv(file_path: &str, vector_size: usize, repetitions: &Vec<f64>
         .has_headers(false)
         .from_writer(file);
 
-    let mut row = vec![vector_size.to_string()];
+    let mut row = vec![vector_size.to_string(), node_num.to_string()];
     row.extend(repetitions.iter().map(|&val| val.to_string()));
 
     writer.write_record(&row)?;

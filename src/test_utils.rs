@@ -2,8 +2,9 @@ use std::error::Error;
 use std::fs::OpenOptions;
 use csv::WriterBuilder;
 
+// Leiden has max 18 nodes, 2^5 = 32. To prevent case that insufficient row for a node happen
 pub fn powers_of_two(n: u32) -> Vec<u32> {
-    (0..n).map(|i| 2_u32.pow(i)).collect()
+    (5..n).map(|i| 2_u32.pow(i)).collect()
 }
 
 pub fn append_to_csv(file_path: &str, vector_size: usize, repetitions: &Vec<f64>) -> Result<(), Box<dyn Error>> {

@@ -2,7 +2,9 @@ use std::f64::consts::PI;
 use mpi::collective::SystemOperation;
 use mpi::traits::*;
 use mpi::Rank;
+use mpi::topology::SimpleCommunicator;
 use mpi::window::{AllocatedWindow, WindowOperations};
+use crate::test_utils::{append_to_csv, powers_of_two};
 
 fn even_1_odd_0(num: usize) -> usize {
     match num % 2 {
@@ -34,7 +36,7 @@ fn get_bounds(n: usize, size: usize, rank: usize) -> (usize, usize) {
     (lower_bound, upper_bound)
 }
 
-pub fn sor(problem_size: usize) {
+pub fn runner(max_size: usize) {
     // ************************
     // **** Setting Up MPI ****
     // ************************
@@ -43,6 +45,19 @@ pub fn sor(problem_size: usize) {
     let size = world.size();
     let rank = world.rank();
 
+    for n in powers_of_two(max_size as u32) {
+        let mut time_records: Vec<f64> = Vec::new();
+        for _ in 0..12 {
+            let time = sor(n as usize, rank, size, &world);
+            time_records.push(time);
+        }
+        if rank == 0 {
+            append_to_csv("rma_data.csv", n as usize, &time_records).expect("Error happened writing csv");
+        }
+    }
+}
+
+pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicator) -> f64 {
     let pred_rank = if rank == 0 { 0 } else { rank - 1 };
     let succ_rank = if rank == size - 1 { rank } else { rank + 1 };
 
@@ -53,10 +68,6 @@ pub fn sor(problem_size: usize) {
     // Give each process at least one row
     if N < size as usize {
         N = size as usize;
-    }
-
-    if rank == 0 {
-        println!("Running SOR on nodes: {}, rows: {}", size, N);
     }
     N += 2;
 
@@ -169,6 +180,7 @@ pub fn sor(problem_size: usize) {
         println!("SOR size: {} x {}, time: {} ms", n_row-2, n_col-2, (t_end-t_start) * 1000.0);
         println!("using {} iterations, diff is {} (allowed diff {})", iteration,max_diff,stop_diff)
     }
+    return (t_end-t_start) * 1000000.0;
 }
 
 fn calc_pred_rank_local_ub(size: Rank, pred_rank: i32, mut N: usize) -> usize {

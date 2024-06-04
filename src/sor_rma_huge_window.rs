@@ -51,7 +51,7 @@ pub fn runner(problem_size: usize, node_num: usize) {
         time_records.push(time);
     }
     if rank == 0 {
-        append_to_csv("rma_data.csv", problem_size, node_num, &time_records).expect("Error happened writing csv");
+        append_to_csv("huge_data.csv", problem_size, node_num, &time_records).expect("Error happened writing csv");
     }
 }
 

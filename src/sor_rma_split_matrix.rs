@@ -8,6 +8,7 @@ use mpi::Rank;
 use mpi::traits::*;
 use mpi::ffi::*;
 use mpi::topology::SimpleCommunicator;
+use mpi::window::{AllocatedWindow, WindowOperations};
 use crate::test_utils::{append_to_csv, powers_of_two};
 
 fn even_1_odd_0(num: usize) -> usize {
@@ -53,7 +54,7 @@ pub fn runner(problem_size: usize, node_num: usize) {
         time_records.push(time);
     }
     if rank == 0 {
-        append_to_csv("raw_data.csv", problem_size, node_num, &time_records).expect("Error happened writing csv");
+        append_to_csv("split_data.csv", problem_size, node_num, &time_records).expect("Error happened writing csv");
     }
 }
 pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicator) -> f64 {
@@ -91,18 +92,17 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
     }
 
     let local_ub = global_ub - (global_lb - 1);
-    // let mut matrix = vec![vec![0.0; n_col]; local_ub+1];
-    let mut row_0 = vec![0.0; n_col];
-    let mut row_ub = vec![0.0; n_col];
+
+    let mut window_local_ub: AllocatedWindow<f64> = world.allocate_window(n_col);
+    let mut window_row_0: AllocatedWindow<f64> = world.allocate_window(n_col);
     // holistic matrix has local_ub + 1 rows
     // Therefore rest of the rows has (local_ub + 1) - 2 rows
     let mut row_rest = vec![vec![0.0; n_col]; local_ub - 1];
     let row_rest_len = row_rest.len();
-    println!("Rank {} has totally {} rows", rank, local_ub + 1);
 
     // Initialize the boundary value
     for j in 0..n_col {
-        row_0[j] = if global_lb - 1 == 0 {
+        window_row_0.window_vector[j] = if global_lb - 1 == 0 {
             4.56
         } else if j == 0 {
             7.32
@@ -113,7 +113,7 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
         };
     }
     for j in 0..n_col {
-        row_ub[j] = if global_ub == n_row - 1 {
+        window_local_ub.window_vector[j] = if global_ub == n_row - 1 {
             9.85
         } else if j == 0 {
             7.32
@@ -144,71 +144,21 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
     // open up local_ub and 0 as windows,
     // let cur put matrix[1] to pred's local ub window
     // let cur put matrix[local_ub-1] to succ's matrix[0]
-
-    let mut window_local_ub = ptr::null_mut();
-    unsafe {
-        MPI_Win_create(
-            row_ub.as_mut_ptr() as *mut c_void,
-            (n_col * size_of::<c_double>()) as MPI_Aint,
-            size_of::<c_double>() as c_int,
-            RSMPI_INFO_NULL,
-            RSMPI_COMM_WORLD,
-            &mut window_local_ub
-        );
-    }
-
-    let mut window_row_0 = ptr::null_mut();
-    unsafe {
-        MPI_Win_create(
-            row_0.as_mut_ptr() as *mut c_void,
-            (n_col * size_of::<c_double>()) as MPI_Aint,
-            size_of::<c_double>() as c_int,
-            RSMPI_INFO_NULL,
-            RSMPI_COMM_WORLD,
-            &mut window_row_0
-        );
-    }
-
     let t_start = mpi::time();
     // Now do the real computation
     let mut iteration = 0;
     loop {
-        unsafe {
-            MPI_Win_fence(0, window_local_ub);
-            MPI_Win_fence(0, window_row_0);
-        }
+        window_local_ub.fence();
+        window_row_0.fence();
         if pred_rank != rank {
-            unsafe {
-                MPI_Put(
-                    row_rest[0].as_mut_ptr() as *mut c_void,
-                    n_col as c_int,
-                    RSMPI_DOUBLE,
-                    pred_rank,
-                    0,
-                    n_col as c_int,
-                    RSMPI_DOUBLE,
-                    window_local_ub
-                );
-            }
+            window_local_ub.put_from_vector(&mut row_rest[0], pred_rank as usize);
         }
         if succ_rank != rank {
-            unsafe {
-                MPI_Put(
-                    row_rest[row_rest_len - 1].as_mut_ptr() as *mut c_void,
-                    n_col as c_int,
-                    RSMPI_DOUBLE,
-                    succ_rank,
-                    0,
-                    n_col as c_int,
-                    RSMPI_DOUBLE,
-                    window_row_0
-                );
-            }
+            window_row_0.put_from_vector(&mut row_rest[row_rest_len - 1], succ_rank as usize)
         }
-        unsafe {
-            MPI_Win_fence(0, window_local_ub);
-            MPI_Win_fence(0, window_row_0);
-        }
+        window_local_ub.fence();
+        window_row_0.fence();
+
         max_diff = 0.0;
         for phase in 0..2 {
             let mut global_row_num = global_lb;
@@ -216,10 +166,10 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
                 let start_col = 1 + (even_1_odd_0(global_row_num) ^ phase);
                 for j in (start_col..n_col-1).step_by(2) {
                     // The stencil operation
-                    let up = if i - 1 == 0 { row_0[j] } else { row_rest[i - 2][j] };
-                    let down = if i + 1 == local_ub { row_ub[j] } else { row_rest[i][j] };
-                    let left = if i == 0 { row_0[j - 1] } else if i == local_ub { row_ub[j - 1] } else { row_rest[i - 1][j - 1] };
-                    let right = if i == 0 { row_0[j + 1] } else if i == local_ub { row_ub[j + 1] } else { row_rest[i - 1][j + 1] };
+                    let up = if i - 1 == 0 { window_row_0.window_vector[j] } else { row_rest[i - 2][j] };
+                    let down = if i + 1 == local_ub { window_local_ub.window_vector[j] } else { row_rest[i][j] };
+                    let left = if i == 0 { window_row_0.window_vector[j - 1] } else if i == local_ub { window_local_ub.window_vector[j - 1] } else { row_rest[i - 1][j - 1] };
+                    let right = if i == 0 { window_row_0.window_vector[j + 1] } else if i == local_ub { window_local_ub.window_vector[j + 1] } else { row_rest[i - 1][j + 1] };
 
                     let stencil_val = (up + down + left + right) / 4.0;
                     diff = (stencil_val as f64 - row_rest[i - 1][j] as f64).abs();

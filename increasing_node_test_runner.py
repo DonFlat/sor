@@ -23,7 +23,7 @@ def main():
     app = args.app
     size = args.size
 
-    node_num = [2, 3, 4, 5, 6, 7, 8]
+    node_num = [2, 4, 6, 8, 10, 12, 14, 16, 18]
 
     if env == 'local':
         for node in node_num:

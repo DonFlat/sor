@@ -34,7 +34,7 @@ def main():
             run_command(local_cmd)
     elif env == 'das':
         for size in sizes:
-            das_cmd = f"prun -np {node} -1 -script $PRUN_ETC/prun-openmpi `pwd`/./target/release/sor {app} {size} {node}"
+            das_cmd = f"prun -np {node} -1 OMPI_OPTS=\"--mca btl tcp,self --mca btl_tcp_if_include ib0\" -script $PRUN_ETC/prun-openmpi `pwd`/./target/release/sor {app} {size} {node}"
             print(f'Running: {das_cmd}')
             run_command(das_cmd)
     else:

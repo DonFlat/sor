@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description="Process some named arguments.")
 
     parser.add_argument('--env', type=str, help='The environment to use, das or local')
-    parser.add_argument('--app', type=str, help='raw | rma | norm')
+    parser.add_argument('--app', type=str, help='raw | big | norm | split')
     parser.add_argument('--size', type=int, help='problem size')
 
     args = parser.parse_args()

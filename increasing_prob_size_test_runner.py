@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description="Process some named arguments.")
 
     parser.add_argument('--env', type=str, help='The environment to use, das or local')
-    parser.add_argument('--app', type=str, help='raw | rma | norm')
+    parser.add_argument('--app', type=str, help='raw | big | norm | split')
     parser.add_argument('-p', type=int, help='numbers of processor')
 
     args = parser.parse_args()
@@ -33,7 +33,7 @@ def main():
     elif env == 'das':
         for size in sizes:
             das_cmd = f"prun -np {node} -1 -script $PRUN_ETC/prun-openmpi `pwd`/./target/release/sor {app} {size} {node}"
-            print(f'Running: {local_cmd}')
+            print(f'Running: {das_cmd}')
             run_command(das_cmd)
     else:
         print("Neither local | das")

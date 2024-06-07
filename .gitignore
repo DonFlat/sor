@@ -27,3 +27,4 @@ debug_files/
 *.csv
 sor_c
 sor_rma_c
+.sh

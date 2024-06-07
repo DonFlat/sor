@@ -23,7 +23,7 @@ def main():
     app = args.app
     size = args.size
 
-    node_num = [2, 4, 6, 8, 10, 12, 14, 16, 18]
+    node_num = [2, 4, 6, 8, 10, 12, 14, 16]
 
     if env == 'local':
         for node in node_num:
@@ -32,7 +32,7 @@ def main():
             run_command(local_cmd)
     elif env == 'das':
         for node in node_num:
-            das_cmd = f"prun -np {node} -1 OMPI_OPTS=\"--mca btl tcp,self --mca btl_tcp_if_include ib0\" -script $PRUN_ETC/prun-openmpi `pwd`/./target/release/sor {app} {size} {node}"
+            das_cmd = f"prun -np {node} -1 -script $PRUN_ETC/prun-openmpi `pwd`/./target/release/sor {app} {size} {node}"
             print(f'Running: {das_cmd}')
             run_command(das_cmd)
     else:

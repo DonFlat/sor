@@ -24,9 +24,7 @@ def main():
     node = args.p
 
     # [2^3, 2^25]
-    sizes = [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16834, 32768,
-             65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432]
-
+    sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16834, 32768, 65536, 131072, 262144]
     if env == 'local':
         for size in sizes:
             local_cmd = f"mpirun -n {node} ./target/release/sor {app} {size} {node}"
@@ -34,7 +32,7 @@ def main():
             run_command(local_cmd)
     elif env == 'das':
         for size in sizes:
-            das_cmd = f"prun -np {node} -1 OMPI_OPTS=\"--mca btl tcp,self --mca btl_tcp_if_include ib0\" -script $PRUN_ETC/prun-openmpi `pwd`/./target/release/sor {app} {size} {node}"
+            das_cmd = f"prun -np {node} -1 -script $PRUN_ETC/prun-openmpi `pwd`/./target/release/sor {app} {size} {node}"
             print(f'Running: {das_cmd}')
             run_command(das_cmd)
     else:

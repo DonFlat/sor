@@ -45,7 +45,7 @@ pub fn runner(problem_size: usize, node_num: usize) {
     let group = create_group(rank, world_size, &world);
 
     let mut time_records: Vec<f64> = Vec::new();
-    for _ in 0..12 {
+    for _ in 0..1 {
         let time = sor(problem_size, rank, world_size, &world, &group);
         time_records.push(time);
     }

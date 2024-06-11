@@ -4,7 +4,7 @@ use mpi::collective::SystemOperation;
 use mpi::Rank;
 use mpi::topology::SimpleCommunicator;
 use mpi::traits::*;
-use crate::test_utils::{append_to_csv, powers_of_two};
+use crate::test_utils::{append_to_csv};
 
 fn even_1_odd_0(num: usize) -> usize {
     match num % 2 {

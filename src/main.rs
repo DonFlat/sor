@@ -6,6 +6,7 @@ mod sor_seq;
 mod test_utils;
 mod sor_rma_raw;
 mod sor_rma_split_matrix;
+mod sor_rma_pscw;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -15,6 +16,7 @@ fn main() {
     match mpi_type {
         "big" => sor_rma_huge_window::runner(problem_size, node_num),
         "split" => sor_rma_split_matrix::runner(problem_size, node_num),
+        "pscw" => sor_rma_pscw::runner(problem_size, node_num),
         "raw" => sor_rma_raw::runner(problem_size, node_num),
         "norm" => sor_sendrecv::runner(problem_size, node_num),
         _ => println!("Invalid arguments"),

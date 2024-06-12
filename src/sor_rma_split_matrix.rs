@@ -1,15 +1,10 @@
 use std::f64::consts::PI;
-use std::ffi::{c_double, c_void};
-use std::mem::size_of;
-use std::os::raw::c_int;
-use std::{env, ptr};
 use mpi::collective::SystemOperation;
 use mpi::Rank;
 use mpi::traits::*;
-use mpi::ffi::*;
 use mpi::topology::SimpleCommunicator;
 use mpi::window::{AllocatedWindow, WindowOperations};
-use crate::test_utils::{append_to_csv, powers_of_two};
+use crate::test_utils::{append_to_csv};
 
 fn even_1_odd_0(num: usize) -> usize {
     match num % 2 {
@@ -48,7 +43,7 @@ pub fn runner(problem_size: usize, node_num: usize) {
     let rank = world.rank();
 
     let mut time_records: Vec<f64> = Vec::new();
-    for _ in 0..12 {
+    for _ in 0..1 {
         let time = sor(problem_size, rank, world_size, &world);
         time_records.push(time);
     }

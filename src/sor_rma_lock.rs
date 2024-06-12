@@ -1,9 +1,11 @@
 use std::f64::consts::PI;
+use std::ffi::{c_int, c_void};
 use mpi::collective::SystemOperation;
+use mpi::ffi::{MPI_LOCK_EXCLUSIVE, MPI_Put, MPI_Win_lock, MPI_Win_unlock, RSMPI_DOUBLE};
 use mpi::Rank;
 use mpi::traits::*;
-use mpi::topology::{SimpleCommunicator, UserGroup};
-use mpi::window::{AllocatedWindow, WindowOperations};
+use mpi::topology::{SimpleCommunicator};
+use mpi::window::{AllocatedWindow};
 use crate::test_utils::{append_to_csv};
 
 fn even_1_odd_0(num: usize) -> usize {
@@ -37,23 +39,22 @@ fn get_bounds(n: usize, size: usize, rank: usize) -> (usize, usize) {
 }
 
 pub fn runner(problem_size: usize, node_num: usize) {
+    // Initialize MPI environment
     let universe = mpi::initialize().unwrap();
     let world = universe.world();
     let world_size = world.size();
     let rank = world.rank();
 
-    let group = create_group(rank, world_size, &world);
-
     let mut time_records: Vec<f64> = Vec::new();
     for _ in 0..1 {
-        let time = sor(problem_size, rank, world_size, &world, &group);
+        let time = sor(problem_size, rank, world_size, &world);
         time_records.push(time);
     }
     if rank == 0 {
-        append_to_csv("pscw_data.csv", problem_size, node_num, &time_records).expect("Error happened writing csv");
+        append_to_csv("lock_data.csv", problem_size, node_num, &time_records).expect("Error happened writing csv");
     }
 }
-pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicator, group: &UserGroup) -> f64 {
+pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicator) -> f64 {
     let pred_rank = if rank == 0 { 0 } else { rank - 1 };
     let succ_rank = if rank == size - 1 { rank } else { rank + 1 };
 
@@ -144,22 +145,40 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
     // Now do the real computation
     let mut iteration = 0;
     loop {
+        world.barrier();
         if pred_rank != rank {
-            window_local_ub.start(&group);
-            window_local_ub.put_from_vector(&mut row_rest[0], pred_rank as usize);
-            window_local_ub.complete();
-
-            window_row_0.post(&group);
-            window_row_0.wait();
+            unsafe {
+                MPI_Win_lock(MPI_LOCK_EXCLUSIVE as c_int, pred_rank, 0, window_local_ub.window_ptr);
+                MPI_Put(
+                    row_rest[0].as_mut_ptr() as *mut c_void,
+                    row_rest[0].len() as c_int,
+                    RSMPI_DOUBLE,
+                    pred_rank,
+                    0,
+                    row_rest[0].len() as c_int,
+                    RSMPI_DOUBLE,
+                    window_local_ub.window_ptr
+                );
+                MPI_Win_unlock(pred_rank, window_local_ub.window_ptr);
+            }
         }
         if succ_rank != rank {
-            window_row_0.start(&group);
-            window_row_0.put_from_vector(&mut row_rest[row_rest_len - 1], succ_rank as usize);
-            window_row_0.complete();
-
-            window_local_ub.post(&group);
-            window_local_ub.wait();
+            unsafe {
+                MPI_Win_lock(MPI_LOCK_EXCLUSIVE as c_int, succ_rank, 0, window_row_0.window_ptr);
+                MPI_Put(
+                    row_rest[row_rest_len - 1].as_mut_ptr() as *mut c_void,
+                    row_rest[row_rest_len - 1].len() as c_int,
+                    RSMPI_DOUBLE,
+                    succ_rank,
+                    0,
+                    row_rest[row_rest_len - 1].len() as c_int,
+                    RSMPI_DOUBLE,
+                    window_row_0.window_ptr
+                );
+                MPI_Win_unlock(succ_rank, window_row_0.window_ptr);
+            }
         }
+        world.barrier();
 
         max_diff = 0.0;
         for phase in 0..2 {
@@ -198,21 +217,9 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
 
     if rank == 0 {
         println!("SOR size: {} x {}, time: {} ms", n_row-2, n_col-2, (t_end-t_start) * 1000.0);
-        println!("using {} iterations, diff is {} (allowed diff {})", iteration,max_diff,stop_diff)
+        println!("using {} iterations, diff is {} (allowed diff {})", iteration, max_diff,stop_diff)
     }
     return (t_end-t_start) * 1000000.0
-}
-
-fn create_group(rank: Rank, size: Rank, world: &SimpleCommunicator) -> UserGroup {
-    let world_group = world.group();
-    let ranks_of_group = if rank == 0 {
-        vec![0 as Rank, 1]
-    } else if rank == size - 1 {
-        vec![size - 2, size - 1]
-    } else {
-        vec![rank - 1, rank, rank + 1]
-    };
-    world_group.include(&*ranks_of_group)
 }
 
 fn print_matrix(matrix: &Vec<Vec<f64>>, n_row: usize, n_col: usize, rank: Rank) {

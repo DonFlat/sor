@@ -7,6 +7,7 @@ mod test_utils;
 mod sor_rma_raw;
 mod sor_rma_split_matrix;
 mod sor_rma_lock;
+mod sor_rma_async;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -19,6 +20,7 @@ fn main() {
         "lock" => sor_rma_lock::runner(problem_size, node_num),
         "raw" => sor_rma_raw::runner(problem_size, node_num),
         "norm" => sor_sendrecv::runner(problem_size, node_num),
+        // "async" => sor_rma_async::runner(problem_size, node_num),
         _ => println!("Invalid arguments"),
     }
 }

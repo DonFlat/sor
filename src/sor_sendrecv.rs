@@ -84,6 +84,7 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
 
     // get my stripe bounds and malloc the grid accordingly
     let (mut global_lb, mut global_ub) = get_bounds(N - 1, size as usize, rank as usize);
+    println!("Rank: {}, originally, global lb: {}, global ub: {}", rank, global_lb, global_ub);
     // row 0 is static
     if global_lb == 0 {
         global_lb = 1;
@@ -107,7 +108,8 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
             }
         }
     }
-
+    println!("Rank: {}, now has global lb: {}, global ub: {}, local ub: {}", rank, global_lb, global_ub, local_ub);
+    println!("Rank: {} in the end has row num: {}", rank, local_ub+1);
     let t_start = mpi::time();
     // Now do the real computation
     let mut iteration = 0;

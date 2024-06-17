@@ -1,11 +1,9 @@
 use std::f64::consts::PI;
-use std::ffi::{c_int, c_void};
 use mpi::collective::SystemOperation;
-use mpi::ffi::{MPI_LOCK_EXCLUSIVE, MPI_Put, MPI_Win_lock, MPI_Win_unlock, RSMPI_DOUBLE};
 use mpi::Rank;
 use mpi::traits::*;
 use mpi::topology::{SimpleCommunicator};
-use mpi::window::{AllocatedWindow};
+use mpi::window::{AllocatedWindow, WindowOperations};
 use crate::test_utils::{append_to_csv};
 
 fn even_1_odd_0(num: usize) -> usize {
@@ -145,38 +143,17 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
     // Now do the real computation
     let mut iteration = 0;
     loop {
-        world.barrier();
         if pred_rank != rank {
-            unsafe {
-                MPI_Win_lock(MPI_LOCK_EXCLUSIVE as c_int, pred_rank, 0, window_local_ub.window_ptr);
-                MPI_Put(
-                    row_rest[0].as_mut_ptr() as *mut c_void,
-                    row_rest[0].len() as c_int,
-                    RSMPI_DOUBLE,
-                    pred_rank,
-                    0,
-                    row_rest[0].len() as c_int,
-                    RSMPI_DOUBLE,
-                    window_local_ub.window_ptr
-                );
-                MPI_Win_unlock(pred_rank, window_local_ub.window_ptr);
-            }
+            window_local_ub.exclusive_lock(pred_rank);
+            window_local_ub.put_from_vector(&mut row_rest[0], pred_rank as usize);
+            window_local_ub.flush(pred_rank);
+            window_local_ub.unlock(pred_rank);
         }
         if succ_rank != rank {
-            unsafe {
-                MPI_Win_lock(MPI_LOCK_EXCLUSIVE as c_int, succ_rank, 0, window_row_0.window_ptr);
-                MPI_Put(
-                    row_rest[row_rest_len - 1].as_mut_ptr() as *mut c_void,
-                    row_rest[row_rest_len - 1].len() as c_int,
-                    RSMPI_DOUBLE,
-                    succ_rank,
-                    0,
-                    row_rest[row_rest_len - 1].len() as c_int,
-                    RSMPI_DOUBLE,
-                    window_row_0.window_ptr
-                );
-                MPI_Win_unlock(succ_rank, window_row_0.window_ptr);
-            }
+            window_row_0.exclusive_lock(succ_rank);
+            window_row_0.put_from_vector(&mut row_rest[row_rest_len - 1], succ_rank as usize);
+            window_row_0.flush(succ_rank);
+            window_row_0.unlock(succ_rank);
         }
         world.barrier();
 

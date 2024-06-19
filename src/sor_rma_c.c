@@ -162,7 +162,7 @@ double run_sor(int size, int rank, int argc, char *argv[]) {
         MPI_Win_fence(0, window_ub);
 
         maxdiff = 0.0;
-        for ( phase = 0; phase < 2 ; phase++){
+      for ( phase = 0; phase < 2 ; phase++){
         for ( i = lb ; i < ub ; i++ ){
             for ( j = 1 + (even(i) ^ phase); j < ncol-1 ; j += 2 ){
             Gnew = stencil(G,i,j);
@@ -172,10 +172,10 @@ double run_sor(int size, int rank, int argc, char *argv[]) {
             G[i][j] = G[i][j] + omega * (Gnew-G[i][j]);
             }
         }
-        }
-        diff = maxdiff;
-        MPI_Allreduce(&diff,&maxdiff,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
-        iteration++;
+      }
+      diff = maxdiff;
+      MPI_Allreduce(&diff,&maxdiff,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+      iteration++;
     } while (maxdiff > stopdiff);
     t_end = MPI_Wtime();
 

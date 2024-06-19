@@ -28,3 +28,4 @@ debug_files/
 sor_c
 sor_rma_c
 .sh
+sor_rma_lock

@@ -146,13 +146,11 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
         if pred_rank != rank {
             window_local_ub.exclusive_lock(pred_rank);
             window_local_ub.put_from_vector(&mut row_rest[0], pred_rank as usize);
-            window_local_ub.flush(pred_rank);
             window_local_ub.unlock(pred_rank);
         }
         if succ_rank != rank {
             window_row_0.exclusive_lock(succ_rank);
             window_row_0.put_from_vector(&mut row_rest[row_rest_len - 1], succ_rank as usize);
-            window_row_0.flush(succ_rank);
             window_row_0.unlock(succ_rank);
         }
         world.barrier();

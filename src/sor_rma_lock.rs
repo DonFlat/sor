@@ -158,17 +158,34 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
         max_diff = 0.0;
         for phase in 0..2 {
             let mut global_row_num = global_lb;
-            for i in 1..local_ub {
-                let start_col = 1 + (even_1_odd_0(global_row_num) ^ phase);
+            // ----------------------- i == 1 ------------------
+            let mut start_col = 1 + (even_1_odd_0(global_row_num) ^ phase);
+            for j in (start_col..n_col-1).step_by(2) {
+                let up = window_row_0.window_vector[j];
+                let down = row_rest[1][j];
+                let left = row_rest[0][j - 1];
+                let right = row_rest[0][j + 1];
+
+                let stencil_val = (up + down + left + right) / 4.0;
+                diff = (stencil_val - row_rest[0][j]).abs();
+
+                if diff > max_diff {
+                    max_diff = diff;
+                }
+                row_rest[0][j] = row_rest[0][j] + omega * (stencil_val - row_rest[0][j]);
+            }
+            global_row_num += 1;
+            // ---------------------- i == [2, local_ub - 2]
+            for i in 2..=local_ub-2 {
+                start_col = 1 + (even_1_odd_0(global_row_num) ^ phase);
                 for j in (start_col..n_col-1).step_by(2) {
-                    // The stencil operation
-                    let up = if i - 1 == 0 { window_row_0.window_vector[j] } else { row_rest[i - 2][j] };
-                    let down = if i + 1 == local_ub { window_local_ub.window_vector[j] } else { row_rest[i][j] };
-                    let left = if i == 0 { window_row_0.window_vector[j - 1] } else if i == local_ub { window_local_ub.window_vector[j - 1] } else { row_rest[i - 1][j - 1] };
-                    let right = if i == 0 { window_row_0.window_vector[j + 1] } else if i == local_ub { window_local_ub.window_vector[j + 1] } else { row_rest[i - 1][j + 1] };
+                    let up = row_rest[i - 2][j];
+                    let down = row_rest[i][j];
+                    let left = row_rest[i - 1][j - 1];
+                    let right = row_rest[i - 1][j + 1];
 
                     let stencil_val = (up + down + left + right) / 4.0;
-                    diff = (stencil_val as f64 - row_rest[i - 1][j] as f64).abs();
+                    diff = (stencil_val - row_rest[i - 1][j]).abs();
 
                     if diff > max_diff {
                         max_diff = diff;
@@ -177,8 +194,25 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
                 }
                 global_row_num += 1;
             }
-        }
+            // ------------------- i == local_ub - 1 (local global)
+            start_col = 1 + (even_1_odd_0(global_row_num) ^ phase);
+            for j in (start_col..n_col-1).step_by(2) {
+                let up = row_rest[local_ub - 3][j];
+                let down = window_local_ub.window_vector[j];
+                let left = row_rest[local_ub - 2][j - 1];
+                let right = row_rest[local_ub - 2][j + 1];
 
+                let stencil_val = (up + down + left + right) / 4.0;
+                diff = (stencil_val - row_rest[local_ub - 2][j]).abs();
+
+                if diff > max_diff {
+                    max_diff = diff;
+                }
+                row_rest[local_ub - 2][j] = row_rest[local_ub - 2][j] + omega * (stencil_val - row_rest[local_ub - 2][j]);
+            }
+            global_row_num += 1;
+        }
+        // ------------ loop region -------------------
         diff = max_diff;
         world.all_reduce_into(&diff, &mut max_diff, SystemOperation::max());
         iteration += 1;

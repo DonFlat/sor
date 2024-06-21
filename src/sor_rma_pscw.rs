@@ -1,8 +1,9 @@
 use std::f64::consts::PI;
 use mpi::collective::SystemOperation;
+use mpi::ffi::RSMPI_COMM_NULL;
 use mpi::Rank;
 use mpi::traits::*;
-use mpi::topology::SimpleCommunicator;
+use mpi::topology::{SimpleCommunicator, UserGroup};
 use mpi::window::{AllocatedWindow, WindowOperations};
 use crate::test_utils::{append_to_csv};
 
@@ -143,16 +144,17 @@ pub fn sor(problem_size: usize, rank: Rank, size: Rank, world: &SimpleCommunicat
     // Now do the real computation
     let mut iteration = 0;
     loop {
-        window_local_ub.fence();
-        window_row_0.fence();
-        if pred_rank != rank {
-            window_local_ub.put_from_vector(&mut row_rest[0], pred_rank as usize);
-        }
-        if succ_rank != rank {
-            window_row_0.put_from_vector(&mut row_rest[row_rest_len - 1], succ_rank as usize)
-        }
-        window_local_ub.fence();
-        window_row_0.fence();
+        // window_local_ub.fence();
+        // window_row_0.fence();
+        // if pred_rank != rank {
+        //     window_local_ub.put_from_vector(&mut row_rest[0], pred_rank as usize);
+        // }
+        // if succ_rank != rank {
+        //     window_row_0.put_from_vector(&mut row_rest[row_rest_len - 1], succ_rank as usize)
+        // }
+        // window_local_ub.fence();
+        // window_row_0.fence();
+
 
         max_diff = 0.0;
         for phase in 0..2 {

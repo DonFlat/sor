@@ -7,7 +7,7 @@ mod test_utils;
 mod sor_rma_raw;
 mod sor_rma_split_matrix;
 mod sor_rma_lock;
-mod sor_rma_async;
+mod sor_rma_pscw;
 
 fn main() {
     let args: Vec<String> = env::args().collect();

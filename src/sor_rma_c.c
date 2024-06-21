@@ -105,7 +105,7 @@ double run_sor(int size, int rank, int argc, char *argv[]) {
   omega   *= 0.8;                   /* magic factor */
 
   /* get my stripe bounds and malloc the grid accordingly */
-  get_bounds(&lb, &ub, N-1, size, rank);
+      get_bounds(&lb, &ub, N-1, size, rank);
   if (lb == 0) lb = 1; /* row 0 is static */
 
   G = (double**)malloc(nrow*sizeof(double*));
